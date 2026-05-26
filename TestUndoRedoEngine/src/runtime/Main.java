@@ -17,6 +17,7 @@ public class Main {
             handleChoice(choice);
         } while (choice != 0);
 
+        ENGINE.clearAll();
         System.out.println("Cam on ban da su dung chuong trinh!");
         SCANNER.close();
     }
