@@ -681,7 +681,7 @@ classDiagram
 
     ActionNode --> ActionNode : prev / next
     ActionHistory --> ActionNode : manages current
-    TextEditor --> ActionHistory : uses
+    TextEditor ..> ActionHistory : uses
 ```
 
 ---
@@ -1069,8 +1069,8 @@ Lý do chọn Java:
 ```java
 public class ActionNode {
     private String snapshot;
-    private ActionNode prev;
-    private ActionNode next;
+    ActionNode prev;   // package-private: chỉ ActionHistory được truy cập trực tiếp
+    ActionNode next;
 
     public ActionNode(String snapshot) {
         this.snapshot = snapshot;
@@ -1086,16 +1086,8 @@ public class ActionNode {
         return prev;
     }
 
-    public void setPrev(ActionNode prev) {
-        this.prev = prev;
-    }
-
     public ActionNode getNext() {
         return next;
-    }
-
-    public void setNext(ActionNode next) {
-        this.next = next;
     }
 }
 ```
@@ -1103,7 +1095,8 @@ public class ActionNode {
 Giải thích ngắn:
 
 - `snapshot` lưu toàn bộ nội dung text tại thời điểm đó — đây là thứ sẽ được restore khi undo/redo.
-- `prev` và `next` tạo thành cấu trúc doubly linked list để `ActionHistory` duyệt qua lịch sử.
+- `prev` và `next` là **package-private** (không có setter công khai). Chỉ `ActionHistory` được phép thao tác trực tiếp lên các con trỏ này, giữ đúng nguyên tắc encapsulation theo UML.
+- UML mới không khai báo setter (`setPrev`, `setNext`) trong `ActionNode` — việc kết nối node là trách nhiệm nội bộ của `ActionHistory`.
 
 ---
 
@@ -1120,8 +1113,8 @@ public class ActionHistory {
 
     public void record(String snapshot) {
         ActionNode newNode = new ActionNode(snapshot);
-        newNode.setPrev(current);
-        current.setNext(newNode); // ghi đè nhánh redo cũ
+        newNode.prev = current;       // truy cập trực tiếp (package-private)
+        current.next = newNode;       // ghi đè nhánh redo cũ
         current = newNode;
     }
 
@@ -1154,32 +1147,16 @@ public class ActionHistory {
     public String getCurrent() {
         return current.getSnapshot();
     }
-
-    public void printChain() {
-        // Traverse to HEAD first
-        ActionNode head = current;
-        while (head.getPrev() != null) {
-            head = head.getPrev();
-        }
-        // Print from HEAD to TAIL, marking current
-        StringBuilder sb = new StringBuilder();
-        ActionNode node = head;
-        while (node != null) {
-            String marker = (node == current) ? " ← current" : "";
-            sb.append("["").append(node.getSnapshot()).append(""]").append(marker);
-            if (node.getNext() != null) sb.append(" ←→ ");
-            node = node.getNext();
-        }
-        System.out.println("History: " + sb);
-    }
 }
 ```
 
 Điểm quan trọng:
 
+- `record()` truy cập trực tiếp `newNode.prev` và `current.next` (package-private) thay vì qua setter — đúng với thiết kế UML mới.
 - `record()` cắt đứt nhánh redo cũ bằng cách ghi đè `current.next` — không cần clear stack riêng.
 - `undo()` và `redo()` chỉ di chuyển con trỏ `current`, không xóa hay thêm node.
 - `getCurrent()` trả về snapshot để `TextEditor` restore buffer.
+- `printChain()` đã được **loại bỏ** theo UML mới — nếu cần debug, có thể đặt logic in trong `Main.java` hoặc `TextEditor.java`.
 
 ---
 
@@ -1226,7 +1203,8 @@ public class TextEditor {
     public void printState(String label) {
         System.out.println("\n=== " + label + " ===");
         System.out.println("Current Text: \"" + getText() + "\"");
-        history.printChain();
+        // Ghi chú: printChain() đã bị loại khỏi ActionHistory theo UML mới.
+        // Nếu cần hiển thị linked list để debug, tự implement riêng ở đây hoặc trong Main.java.
     }
 }
 ```
@@ -1236,6 +1214,7 @@ Giải thích quan trọng:
 - `TextEditor` sửa buffer rồi gọi `history.record()` — đơn giản hơn nhiều so với mô hình hai stack.
 - `undo()` và `redo()` chỉ cần lấy snapshot từ `ActionHistory` và gán lại `buffer`.
 - Không cần flag `recordAction` vì undo/redo không gọi lại `record()`.
+- Quan hệ `TextEditor ..> ActionHistory` (dashed arrow) trong UML mới biểu thị **dependency** (TextEditor *sử dụng* ActionHistory nhưng không *sở hữu* vòng đời của nó). Trong code, `history` vẫn là field nhưng được khởi tạo trong constructor — quan hệ này là composition nhẹ.
 
 ## 6.5 `Main.java`
 
@@ -1486,6 +1465,8 @@ function redo():
   - Dùng `StringBuilder` cho text buffer.
   - `record()` ghi đè `current.next` thay vì clear một stack riêng.
   - Không cần `recordAction` flag vì undo/redo không gọi lại `record()`.
+  - `ActionNode` không có setter công khai (`setPrev`, `setNext`) — chỉ getter. Pointer manipulation được thực hiện trực tiếp trong `ActionHistory` qua package-private access, khớp với UML mới.
+  - `ActionHistory` không có `printChain()` — debug output nên được xử lý ở tầng `TextEditor` hoặc `Main`.
 
 ---
 
@@ -1678,18 +1659,213 @@ Chức năng đúng quan trọng hơn giao diện đẹp.
 
 CSD201 là môn Data Structures & Algorithms. Báo cáo không nên chỉ chụp code. Giảng viên muốn thấy nhóm hiểu:
 
-- Vì sao dùng Stack?
-- Vì sao cần hai Stack?
-- Action lưu dữ liệu gì?
-- Undo/Redo hoạt động theo LIFO như thế nào?
+- Vì sao dùng Doubly Linked List thay vì hai Stack riêng?
+- `ActionNode` lưu dữ liệu gì? Tại sao snapshot là toàn bộ buffer?
+- Con trỏ `current` hoạt động thế nào khi undo/redo?
+- Tại sao `ActionNode` không cần setter công khai?
 - Edge cases xử lý ra sao?
+
+---
+
+### Giải thích & Đáp án từng câu hỏi
+
+#### ❓ Câu 1: Vì sao dùng Doubly Linked List thay vì hai Stack riêng?
+
+**Bối cảnh câu hỏi:**
+Cách tiếp cận phổ biến cho Undo/Redo là dùng **hai Stack**: một `undoStack` và một `redoStack`. Giảng viên sẽ hỏi tại sao nhóm lại dùng Doubly Linked List thay vì cách đó.
+
+**Đáp án:**
+
+Lịch sử chỉnh sửa text là một **chuỗi tuyến tính** — người dùng chỉ đi về trước (undo) hoặc đi về sau (redo), không bao giờ nhảy lung tung. Doubly Linked List phản ánh chính xác cấu trúc đó:
+
+| Tiêu chí | Hai Stack riêng | Doubly Linked List |
+|---|---|---|
+| Cấu trúc lưu | 2 stack (`undoStack`, `redoStack`) | 1 linked list + 1 con trỏ `current` |
+| Khi undo | pop từ `undoStack`, push vào `redoStack` | `current = current.prev` |
+| Khi redo | pop từ `redoStack`, push vào `undoStack` | `current = current.next` |
+| Khi snapshot mới | push vào `undoStack`, clear toàn bộ `redoStack` | gắn node mới vào `current.next`, di chuyển `current` |
+| Số lần copy dữ liệu | nhiều hơn (phải move giữa 2 stack) | ít hơn (chỉ di chuyển pointer) |
+| Độ trực quan | Cần hiểu 2 cấu trúc song song | 1 chuỗi duy nhất, dễ hình dung |
+
+**Câu trả lời ngắn gọn khi bị hỏi:**
+
+```text
+Because editing history is a linear sequence. A doubly linked list models
+this naturally: undo moves the current pointer backward, redo moves it forward.
+No need to shuffle data between two separate stacks.
+```
+
+---
+
+#### ❓ Câu 2: `ActionNode` lưu dữ liệu gì? Tại sao snapshot là toàn bộ buffer?
+
+**Bối cảnh câu hỏi:**
+Giảng viên có thể hỏi: "Tại sao không lưu chỉ ký tự vừa gõ / vừa xóa mà phải lưu toàn bộ text?"
+
+**Đáp án:**
+
+Mỗi `ActionNode` lưu một `snapshot` — tức là **toàn bộ nội dung text buffer** tại thời điểm đó.
+
+```text
+ActionNode(snapshot="")   → trạng thái ban đầu
+ActionNode(snapshot="H")  → sau khi gõ H
+ActionNode(snapshot="He") → sau khi gõ e
+```
+
+Lý do lưu **toàn bộ buffer** thay vì chỉ lưu delta (ký tự thay đổi):
+
+| Cách lưu | Ưu điểm | Nhược điểm |
+|---|---|---|
+| **Snapshot toàn bộ** | Undo/redo chỉ cần `buffer = snapshot` — cực đơn giản | Tốn bộ nhớ hơn nếu text dài |
+| **Delta (chỉ lưu thay đổi)** | Tiết kiệm bộ nhớ | Phải tính ngược lại (inverse operation) — phức tạp hơn nhiều |
+
+Với project CSD201 (text ngắn, demo đơn giản), **snapshot-based** là lựa chọn đúng đắn vì:
+- Code đơn giản, ít bug.
+- Undo/redo không cần biết loại thao tác là gì (INSERT hay DELETE).
+- Phù hợp với scope của môn học.
+
+**Câu trả lời ngắn gọn khi bị hỏi:**
+
+```text
+Each ActionNode stores a full snapshot of the text buffer at that moment.
+This makes undo/redo trivial: just restore buffer = snapshot.
+We trade a bit of memory for a much simpler and more correct implementation.
+```
+
+---
+
+#### ❓ Câu 3: Con trỏ `current` hoạt động thế nào khi undo/redo?
+
+**Bối cảnh câu hỏi:**
+Đây là câu hỏi cốt lõi nhất. Giảng viên muốn chắc chắn nhóm hiểu cơ chế điều hướng.
+
+**Đáp án:**
+
+`current` là con trỏ duy nhất trong `ActionHistory`, luôn trỏ vào **node đang là trạng thái hiện tại** của editor.
+
+**Khi `record(snapshot)` được gọi:**
+
+```text
+1. Tạo ActionNode mới với snapshot đó.
+2. newNode.prev = current        ← kết nối về sau
+3. current.next = newNode        ← cắt đứt nhánh redo cũ, kết nối về trước
+4. current = newNode             ← tiến tới node mới
+```
+
+**Khi `undo()` được gọi:**
+
+```text
+current = current.prev
+→ trả về current.snapshot để restore buffer
+```
+
+**Khi `redo()` được gọi:**
+
+```text
+current = current.next
+→ trả về current.snapshot để restore buffer
+```
+
+**Minh họa bằng ví dụ:**
+
+```text
+Sau Type H, Type e, Type l:
+["" ] ←→ ["H"] ←→ ["He"] ←→ ["Hel"]  ← current
+
+Sau Undo:
+["" ] ←→ ["H"] ←→ ["He"]  ← current  ←→ ["Hel"]
+
+Sau Redo:
+["" ] ←→ ["H"] ←→ ["He"] ←→ ["Hel"]  ← current
+
+Sau Type ! (khi current ở "He"):
+["" ] ←→ ["H"] ←→ ["He"] ←→ ["He!"]  ← current
+(nhánh ["Hel"] bị cắt vĩnh viễn)
+```
+
+**Câu trả lời ngắn gọn khi bị hỏi:**
+
+```text
+current always points to the active state.
+Undo moves it to current.prev, redo moves it to current.next.
+record() attaches a new node at current.next and advances current,
+automatically discarding the old redo branch.
+```
+
+---
+
+#### ❓ Câu 4: Tại sao `ActionNode` không cần setter công khai?
+
+**Bối cảnh câu hỏi:**
+Giảng viên hoặc bạn nhóm có thể thắc mắc: "Sao không dùng `setPrev()` / `setNext()` như bình thường?"
+
+**Đáp án:**
+
+Theo UML của project, `ActionNode` chỉ khai báo:
+- `getSnapshot()`, `getPrev()`, `getNext()` — **3 getter**
+- **Không có setter nào**
+
+Lý do:
+
+1. **Encapsulation có chủ đích**: `ActionNode` chỉ là một container dữ liệu — nó không nên tự quyết định ai kết nối với nó. Việc thao tác `prev`/`next` là **trách nhiệm độc quyền của `ActionHistory`**.
+
+2. **Tránh lạm dụng từ bên ngoài**: Nếu có setter công khai, code ở `Main.java` hay `TextEditor.java` có thể vô tình (hoặc cố ý) thay đổi cấu trúc linked list — gây bug khó tìm.
+
+3. **Giải pháp trong Java**: Đặt `prev` và `next` là **package-private** (không có modifier). Khi `ActionNode` và `ActionHistory` cùng trong một package, `ActionHistory` vẫn truy cập được trực tiếp:
+
+```java
+// Trong ActionHistory.java — hợp lệ vì cùng package:
+newNode.prev = current;
+current.next = newNode;
+
+// Trong Main.java — KHÔNG truy cập được nếu Main ở package khác:
+// someNode.prev = ...;  ← compile error
+```
+
+**Câu trả lời ngắn gọn khi bị hỏi:**
+
+```text
+ActionNode is a pure data container. Pointer manipulation (linking nodes)
+is the sole responsibility of ActionHistory. Removing public setters
+prevents external code from corrupting the linked list structure.
+Package-private access lets ActionHistory do its job without exposing
+the internals to the rest of the program.
+```
+
+---
+
+#### ❓ Câu 5: Edge cases xử lý ra sao?
+
+**Bối cảnh câu hỏi:**
+Giảng viên muốn biết nhóm có nghĩ đến các trường hợp đặc biệt không, hay chỉ test happy path.
+
+**Đáp án — 5 edge case chính:**
+
+| Edge Case | Tình huống | Xử lý đúng |
+|---|---|---|
+| **Undo khi HEAD** | `current.prev == null` (đang ở trạng thái ban đầu) | `canUndo()` trả `false`, in `"Nothing to undo"`, không crash |
+| **Redo khi TAIL** | `current.next == null` (đang ở trạng thái mới nhất) | `canRedo()` trả `false`, in `"Nothing to redo"`, không crash |
+| **Snapshot mới sau Undo** | Undo xong rồi gõ text → nhánh redo cũ bị cắt | `record()` ghi đè `current.next`, nhánh cũ bị GC thu hồi tự động |
+| **Delete vị trí không hợp lệ** | `position < 0` hoặc `position + length > buffer.length()` | Kiểm tra trong `deleteText()`, in thông báo lỗi, không thay đổi buffer và không gọi `record()` |
+| **Undo/Redo không gọi record()** | Sau undo, buffer được restore nhưng không tạo node mới | `TextEditor.undo()` chỉ gán `buffer = snapshot`, **tuyệt đối không** gọi `history.record()` |
+
+**Câu trả lời ngắn gọn khi bị hỏi:**
+
+```text
+We guard every undo/redo with canUndo()/canRedo() before moving the pointer.
+Invalid delete positions are rejected before touching the buffer.
+The record() method is never called during undo or redo — only during
+actual user edits — so the history chain stays consistent.
+```
+
+---
 
 ### Cách tránh
 
 Report nên có đủ:
 
 - CT Analysis.
-- Stack diagrams.
+- Linked List State diagrams.
 - Pseudocode.
 - Test cases.
 - Explanation of design decisions.
