@@ -4,7 +4,7 @@
 
 Chào cả nhóm! Đây là tài liệu lập kế hoạch đầy đủ cho project CSD201 với chủ đề **Undo/Redo Engine for Text Editors**. Mục tiêu của project không chỉ là viết được chương trình chạy đúng, mà còn là chứng minh rằng nhóm hiểu rõ cách dùng **Stack** để giải quyết một bài toán thực tế giống như cơ chế Undo/Redo trong Microsoft Word, VS Code hoặc Google Docs.
 
-Project này rất phù hợp với môn Data Structures & Algorithms vì nó biến một cấu trúc dữ liệu tưởng như đơn giản — **Stack** — thành một chức năng quen thuộc mà ai cũng dùng hằng ngày. Nếu nhóm làm tốt phần phân tích, thiết kế, code, test và báo cáo, đây sẽ là một project rất thuyết phục.
+Project này rất phù hợp với môn Data Structures & Algorithms vì nó biến một cấu trúc dữ liệu tưởng như đơn giản — **Doubly Linked List** — thành một chức năng quen thuộc mà ai cũng dùng hằng ngày. Thay vì dùng hai Stack riêng biệt, thiết kế này dùng một danh sách liên kết đôi (`ActionNode`) với con trỏ `current` để duyệt qua lịch sử thao tác. Nếu nhóm làm tốt phần phân tích, thiết kế, code, test và báo cáo, đây sẽ là một project rất thuyết phục.
 
 ---
 
@@ -17,7 +17,7 @@ Computational Thinking gồm 4 trụ cột chính:
 3. **Abstraction** — Trừu tượng hóa phần quan trọng.
 4. **Algorithm Design** — Thiết kế thuật toán từng bước.
 
-Trong project này, nhóm nên trình bày CT như “xương sống” của toàn bộ quá trình phân tích.
+Trong project này, nhóm nên trình bày CT như “xương sống” của toàn bộ quá trình phân tích. Trọng tâm data structure là **Doubly Linked List** thể hiện qua `ActionNode`, được quản lý bởi `ActionHistory`.
 
 ---
 
@@ -47,59 +47,53 @@ Trong phiên bản đơn giản cho CSD201, nhóm có thể dùng `StringBuilder
 
 ---
 
-### B. Action / Command
+### B. ActionNode
 
-Mỗi thao tác có thể undo/redo được sẽ được lưu thành một object gọi là `Action` hoặc `Command`.
+Mỗi trạng thái text được lưu thành một node trong danh sách liên kết đôi, gọi là `ActionNode`.
 
-Một action cần trả lời được các câu hỏi:
+Một `ActionNode` cần lưu:
 
-- Loại thao tác là gì? `INSERT` hay `DELETE`?
-- Nội dung bị thêm/xóa là gì?
-- Vị trí xảy ra thao tác ở đâu?
-- Thời điểm thao tác xảy ra khi nào?
+- `snapshot`: chuỗi text đầy đủ tại thời điểm đó.
+- `prev`: con trỏ đến node trước (trạng thái cũ hơn).
+- `next`: con trỏ đến node sau (trạng thái mới hơn, dùng cho redo).
 
 Ví dụ:
 
 ```text
-Action(type=INSERT, content="H", position=0)
-Action(type=DELETE, content="e", position=1)
+ActionNode(snapshot="")  ←→  ActionNode(snapshot="H")  ←→  ActionNode(snapshot="He")
 ```
 
 ---
 
-### C. Undo Stack
+### C. ActionHistory và con trỏ current
 
-`undoStack` lưu các action đã thực hiện.
+`ActionHistory` quản lý toàn bộ chuỗi `ActionNode` như một doubly linked list, với con trỏ `current` trỏ đến trạng thái hiện tại.
 
 Khi người dùng làm một thao tác mới:
 
 ```text
-Type "H" → push Action(INSERT, "H", 0) vào undoStack
+record(snapshot mới) → tạo ActionNode mới, gắn vào current.next, cắt bỏ nhánh redo cũ, di chuyển current sang node mới
 ```
 
 Khi undo:
 
 ```text
-pop action mới nhất từ undoStack
-đảo ngược action đó
-push action đó sang redoStack
+current = current.prev  → trả về current.snapshot
 ```
 
 ---
 
-### D. Redo Stack
+### D. Redo qua con trỏ next
 
-`redoStack` lưu các action vừa bị undo và có thể redo lại.
+Redo không cần stack riêng. Sau khi undo, `current` lùi về `current.prev` nhưng node cũ vẫn còn trong linked list qua `current.next`.
 
 Khi redo:
 
 ```text
-pop action mới nhất từ redoStack
-thực hiện lại action đó
-push action đó về undoStack
+current = current.next  → trả về current.snapshot
 ```
 
-Nếu người dùng undo xong nhưng lại thực hiện một action mới, redoStack phải bị xóa vì lịch sử redo cũ không còn hợp lệ.
+Nếu người dùng undo xong rồi gõ text mới, `record()` sẽ tạo một `ActionNode` mới gắn vào `current.next`, cắt đứt nhánh redo cũ.
 
 Ví dụ:
 
@@ -107,22 +101,22 @@ Ví dụ:
 Type H, Type e, Undo, Type a
 ```
 
-Sau khi `Type a`, thao tác redo cho `e` không còn hợp lệ nữa.
+Sau khi `Type a`, node chứa snapshot `"He"` bị thay thế; redo không còn trỏ về đó được nữa.
 
 ---
 
-### E. Engine Logic
+### E. ActionHistory Logic
 
-`UndoRedoEngine` là bộ não quản lý hai stack.
+`ActionHistory` là bộ não quản lý doubly linked list.
 
 Nhiệm vụ chính:
 
-- Nhận action mới.
-- Push action vào undoStack.
-- Clear redoStack khi có action mới.
-- Undo action mới nhất.
-- Redo action mới nhất.
-- Cung cấp lịch sử thao tác để hiển thị/debug.
+- `record(snapshot)`: tạo `ActionNode` mới, gắn vào `current.next`, di chuyển `current`.
+- `undo()`: di chuyển `current = current.prev`, trả về snapshot.
+- `redo()`: di chuyển `current = current.next`, trả về snapshot.
+- `canUndo()`: kiểm tra `current.prev != null`.
+- `canRedo()`: kiểm tra `current.next != null`.
+- `getCurrent()`: trả về `current.snapshot`.
 
 ---
 
@@ -164,7 +158,7 @@ Các editor như Microsoft Word, VS Code, Notepad++, Google Docs đều có hàn
 
 ### Pattern 1: Thao tác mới nhất được undo trước
 
-Đây chính là nguyên tắc **Last In, First Out — LIFO** của Stack.
+Đây chính là nguyên tắc duyệt ngược trong **Doubly Linked List**: `current` lùi dần về `prev`.
 
 Ví dụ người dùng gõ:
 
@@ -188,16 +182,16 @@ o → l → l → e → H
 
 Trong editor thật, nút Redo chỉ hoạt động sau khi người dùng đã Undo.
 
-Nếu chưa undo gì, redoStack rỗng:
+Nếu chưa undo gì, `current.next` là null:
 
 ```text
 Redo unavailable
 ```
 
-Điều này map trực tiếp sang Stack:
+Điều này map trực tiếp sang linked list:
 
 ```text
-redoStack.isEmpty() == true
+current.next == null
 ```
 
 ---
@@ -213,12 +207,14 @@ Trong VS Code hoặc Word:
 
 Vì người dùng đã tạo một nhánh lịch sử mới.
 
-Trong project:
+Trong project, khi `record()` được gọi sau một undo, nó gắn node mới vào `current.next` và cắt đứt phần còn lại của chuỗi:
 
 ```text
-performAction(newAction):
-    undoStack.push(newAction)
-    redoStack.clear()
+record(newSnapshot):
+    newNode = ActionNode(newSnapshot)
+    newNode.prev = current
+    current.next = newNode   // ghi đè nhánh redo cũ
+    current = newNode
 ```
 
 ---
@@ -292,10 +288,10 @@ Khi người dùng gõ một ký tự hoặc một chuỗi:
 2. Xác định vị trí chèn trong text buffer.
 3. Chèn nội dung vào text buffer.
 4. Tạo một `Action` có type là `INSERT`.
-5. Lưu content, position, timestamp vào action.
-6. Push action vào `undoStack`.
-7. Xóa toàn bộ `redoStack` vì action mới làm redo history cũ không còn hợp lệ.
-8. Hiển thị text hiện tại và trạng thái stack.
+5. Lấy snapshot (toàn bộ nội dung buffer sau khi insert).
+6. Gọi `history.record(snapshot)` — tạo `ActionNode` mới và di chuyển `current`.
+7. Nhánh redo cũ bị cắt tự động vì `current.next` được ghi đè.
+8. Hiển thị text hiện tại và trạng thái `current`.
 
 Ví dụ:
 
@@ -303,8 +299,7 @@ Ví dụ:
 Current text: "H"
 User types "e" at position 1
 New text: "He"
-undoStack: [INSERT H, INSERT e]
-redoStack: []
+ActionNodes: [""] ←→ ["H"] ←→ ["He"]  ← current
 ```
 
 ---
@@ -316,11 +311,10 @@ Khi người dùng xóa một ký tự hoặc chuỗi:
 1. Kiểm tra vị trí xóa có hợp lệ không.
 2. Lấy nội dung sắp bị xóa để lưu lại.
 3. Xóa nội dung khỏi text buffer.
-4. Tạo một `Action` có type là `DELETE`.
-5. Lưu content đã bị xóa, position, timestamp.
-6. Push action vào `undoStack`.
-7. Clear `redoStack`.
-8. Hiển thị text và stack state.
+4. Lấy snapshot (toàn bộ nội dung buffer sau khi delete).
+5. Gọi `history.record(snapshot)` — tạo `ActionNode` mới và di chuyển `current`.
+6. Nhánh redo cũ bị cắt tự động.
+7. Hiển thị text và trạng thái `current`.
 
 Ví dụ:
 
@@ -328,8 +322,7 @@ Ví dụ:
 Current text: "Hello"
 Delete character at position 4: "o"
 New text: "Hell"
-undoStack: [..., DELETE o]
-redoStack: []
+ActionNodes: [...] ←→ ["Hello"] ←→ ["Hell"]  ← current
 ```
 
 ---
@@ -338,22 +331,22 @@ redoStack: []
 
 Khi người dùng bấm Undo:
 
-1. Kiểm tra `undoStack` có rỗng không.
-2. Nếu rỗng, báo: “Nothing to undo”.
-3. Nếu không rỗng, pop action mới nhất từ `undoStack`.
-4. Nếu action là `INSERT`, xóa content đó khỏi text buffer tại position đã lưu.
-5. Nếu action là `DELETE`, chèn lại content đó vào text buffer tại position đã lưu.
-6. Push action vừa undo sang `redoStack`.
-7. Hiển thị text và stack state.
+1. Kiểm tra `history.canUndo()` — tức `current.prev != null`.
+2. Nếu không thể undo, báo: “Nothing to undo”.
+3. Nếu được, gọi `history.undo()` — di chuyển `current = current.prev`.
+4. Lấy `history.getCurrent()` để lấy snapshot trước đó.
+5. Cập nhật `buffer` của `TextEditor` từ snapshot vừa lấy.
+6. Hiển thị text và trạng thái `current`.
 
 Ví dụ:
 
 ```text
-Text: "Hel"
-undoStack top: INSERT l at position 2
-Undo → delete "l" at position 2
+Before undo:
+ActionNodes: ["H"] ←→ ["He"] ←→ ["Hel"]  ← current
+
+After undo (current.prev):
+ActionNodes: ["H"] ←→ ["He"]  ← current  ←→ ["Hel"]
 Text becomes: "He"
-Move action to redoStack
 ```
 
 ---
@@ -362,40 +355,39 @@ Move action to redoStack
 
 Khi người dùng bấm Redo:
 
-1. Kiểm tra `redoStack` có rỗng không.
-2. Nếu rỗng, báo: “Nothing to redo”.
-3. Nếu không rỗng, pop action mới nhất từ `redoStack`.
-4. Nếu action là `INSERT`, chèn lại content vào text buffer tại position đã lưu.
-5. Nếu action là `DELETE`, xóa lại content khỏi text buffer tại position đã lưu.
-6. Push action vừa redo về `undoStack`.
-7. Hiển thị text và stack state.
+1. Kiểm tra `history.canRedo()` — tức `current.next != null`.
+2. Nếu không thể redo, báo: “Nothing to redo”.
+3. Nếu được, gọi `history.redo()` — di chuyển `current = current.next`.
+4. Lấy `history.getCurrent()` để lấy snapshot tiếp theo.
+5. Cập nhật `buffer` của `TextEditor` từ snapshot vừa lấy.
+6. Hiển thị text và trạng thái `current`.
 
 Ví dụ:
 
 ```text
-Text: "He"
-redoStack top: INSERT l at position 2
-Redo → insert "l" at position 2
+Before redo:
+ActionNodes: ["H"] ←→ ["He"]  ← current  ←→ ["Hel"]
+
+After redo (current.next):
+ActionNodes: ["H"] ←→ ["He"] ←→ ["Hel"]  ← current
 Text becomes: "Hel"
-Move action back to undoStack
 ```
 
 ---
 
 # STEP 2 — Data Structure Design
 
-## 2.1 Action / Command Object
+## 2.1 ActionNode
 
-Một undo-able operation nên được biểu diễn bằng object `Action`.
+Mỗi trạng thái text trong lịch sử được lưu bằng một `ActionNode` trong doubly linked list.
 
 ### Java-style structure
 
 ```java
-class Action {
-    ActionType type;      // INSERT or DELETE
-    String content;       // text inserted or deleted
-    int position;         // location in the text buffer
-    LocalDateTime timestamp;
+class ActionNode {
+    String snapshot;       // toàn bộ nội dung text tại thời điểm này
+    ActionNode prev;       // trỏ về trạng thái cũ hơn (null nếu là đầu list)
+    ActionNode next;       // trỏ về trạng thái mới hơn (null nếu là cuối list)
 }
 ```
 
@@ -403,151 +395,100 @@ class Action {
 
 | Field | Kiểu dữ liệu | Mục đích |
 |---|---|---|
-| `type` | enum | Xác định action là INSERT hay DELETE |
-| `content` | String | Nội dung được thêm hoặc bị xóa |
-| `position` | int | Vị trí trong text buffer |
-| `timestamp` | LocalDateTime | Hỗ trợ hiển thị lịch sử thao tác |
+| `snapshot` | String | Toàn bộ nội dung text tại thời điểm này |
+| `prev` | ActionNode | Con trỏ về node trước (undo sẽ đi theo hướng này) |
+| `next` | ActionNode | Con trỏ về node sau (redo sẽ đi theo hướng này) |
 
 ---
 
-## 2.2 Two-Stack Model
+## 2.2 Doubly Linked List Model
 
-Mô hình chính của project là hai stack:
-
-- `undoStack`: chứa các thao tác đã thực hiện.
-- `redoStack`: chứa các thao tác đã undo và có thể redo.
+Mô hình chính của project là một **doubly linked list** các `ActionNode`, với con trỏ `current` trong `ActionHistory` trỏ đến trạng thái hiện tại.
 
 ```mermaid
 flowchart LR
-    UserAction[New User Action] --> UndoStack[undoStack]
-    UndoStack -- undo: pop --> ApplyReverse[Apply Reverse Operation]
-    ApplyReverse --> RedoStack[redoStack]
-    RedoStack -- redo: pop --> ApplyAgain[Apply Original Operation]
-    ApplyAgain --> UndoStack
+    UserAction[New Snapshot] --> Record[ActionHistory.record()]
+    Record --> NewNode[New ActionNode]
+    NewNode -- prev --> Current[current]
+    Current -- next --> NewNode
+    Record -- moves current to --> NewNode
+    Current -- undo: current=prev --> Prev[prev node]
+    Current -- redo: current=next --> Next[next node]
 ```
 
 ASCII version:
 
 ```text
-              New Action
-                  |
-                  v
-            +-------------+
-            | undoStack   |
-            |-------------|
-            | latest      | <- top
-            | previous    |
-            | oldest      |
-            +-------------+
-                  |
-               undo pop
-                  v
-            +-------------+
-            | redoStack   |
-            |-------------|
-            | undone      | <- top
-            +-------------+
-                  |
-               redo pop
-                  v
-            back to undoStack
+  HEAD                                      TAIL
+  [snapshot=""] <-> [snapshot="H"] <-> [snapshot="He"] <-> [snapshot="Hel"]
+                                                               ^
+                                                           current
+
+  Undo → current moves left:    current = current.prev
+  Redo → current moves right:   current = current.next
+  New record → new node appended after current; current.next (old redo chain) is discarded
 ```
 
 ---
 
-## 2.3 Push/Pop Behavior
+## 2.3 Linked List Navigation Behavior
 
-### Case 1: Perform INSERT
-
-```text
-1. Apply INSERT to text buffer.
-2. Push INSERT action to undoStack.
-3. Clear redoStack.
-```
-
-Stack behavior:
+### Case 1: Record new snapshot (after INSERT or DELETE)
 
 ```text
-undoStack.push(insertAction)
-redoStack.clear()
+1. Apply INSERT/DELETE to text buffer.
+2. Take snapshot = buffer.toString().
+3. Call history.record(snapshot).
+   → creates new ActionNode
+   → newNode.prev = current
+   → current.next = newNode  (old redo chain discarded)
+   → current = newNode
 ```
 
 ---
 
-### Case 2: Perform DELETE
+### Case 2: Undo
 
 ```text
-1. Save deleted content.
-2. Apply DELETE to text buffer.
-3. Push DELETE action to undoStack.
-4. Clear redoStack.
+1. Check canUndo(): current.prev != null.
+2. Move current = current.prev.
+3. Return current.snapshot → restore buffer.
 ```
 
-Stack behavior:
+Linked list behavior:
 
 ```text
-undoStack.push(deleteAction)
-redoStack.clear()
-```
-
----
-
-### Case 3: Undo INSERT
-
-```text
-1. Pop INSERT from undoStack.
-2. Delete inserted content from text buffer.
-3. Push that action to redoStack.
-```
-
-Stack behavior:
-
-```text
-action = undoStack.pop()
-reverse(action)
-redoStack.push(action)
+before: ... ←→ ["He"] ←→ ["Hel"]  ← current
+after:  ... ←→ ["He"]  ← current  ←→ ["Hel"]
 ```
 
 ---
 
-### Case 4: Undo DELETE
+### Case 3: Redo
 
 ```text
-1. Pop DELETE from undoStack.
-2. Insert deleted content back into text buffer.
-3. Push that action to redoStack.
+1. Check canRedo(): current.next != null.
+2. Move current = current.next.
+3. Return current.snapshot → restore buffer.
 ```
 
----
-
-### Case 5: Redo INSERT
+Linked list behavior:
 
 ```text
-1. Pop INSERT from redoStack.
-2. Insert content again.
-3. Push action back to undoStack.
-```
-
----
-
-### Case 6: Redo DELETE
-
-```text
-1. Pop DELETE from redoStack.
-2. Delete content again.
-3. Push action back to undoStack.
+before: ... ←→ ["He"]  ← current  ←→ ["Hel"]
+after:  ... ←→ ["He"] ←→ ["Hel"]  ← current
 ```
 
 ---
 
 ## 2.4 Edge Cases
 
-### Edge Case 1: Undo khi undoStack rỗng
+### Edge Case 1: Undo khi current đã là HEAD
 
-Nếu không có action nào để undo:
+Nếu không thể lùi thêm:
 
 ```text
-undoStack.isEmpty() == true
+current.prev == null
 ```
 
 Chương trình nên in:
@@ -560,12 +501,12 @@ Không được crash.
 
 ---
 
-### Edge Case 2: Redo khi redoStack rỗng
+### Edge Case 2: Redo khi current đã là TAIL
 
-Nếu không có action nào vừa bị undo:
+Nếu không thể tiến thêm:
 
 ```text
-redoStack.isEmpty() == true
+current.next == null
 ```
 
 Chương trình nên in:
@@ -576,7 +517,7 @@ Nothing to redo.
 
 ---
 
-### Edge Case 3: Redo sau khi có action mới
+### Edge Case 3: Redo bị cắt sau khi có snapshot mới
 
 Ví dụ:
 
@@ -588,7 +529,7 @@ Type a
 Redo
 ```
 
-Sau khi `Type a`, redoStack phải clear. Vì vậy Redo không còn thao tác nào.
+Sau khi `Type a`, `record()` ghi đè `current.next` bằng node mới. Nhánh chứa snapshot `"He"` bị cắt khỏi linked list và Redo không còn đường đi nào nữa.
 
 ---
 
@@ -620,18 +561,15 @@ Ví dụ đặt:
 MAX_HISTORY = 100
 ```
 
-Nếu undoStack vượt quá giới hạn, xóa action cũ nhất.
-
-Vì Stack chuẩn chỉ thao tác ở top, nếu muốn xóa phần cũ nhất dễ dàng, nhóm có thể dùng `Deque<Action>` trong Java:
+Nếu linked list vượt quá giới hạn, xóa `ActionNode` cũ nhất (HEAD) bằng cách:
 
 ```java
-Deque<Action> undoStack = new ArrayDeque<>();
-```
-
-Khi quá giới hạn:
-
-```java
-undoStack.removeLast(); // nếu top nằm ở đầu deque
+// Đếm số node từ HEAD đến TAIL
+// Nếu count > MAX_HISTORY, tháo rời node HEAD:
+ActionNode oldHead = head;
+head = head.next;
+if (head != null) head.prev = null;
+oldHead.next = null;
 ```
 
 Tuy nhiên, để giữ project đơn giản, nhóm có thể:
@@ -647,7 +585,7 @@ Tất cả diagram dưới đây dùng Mermaid để có thể render trong Obsi
 
 ---
 
-## 3.1 Stack State Diagram
+## 3.1 Linked List State Diagram
 
 Chuỗi thao tác mẫu:
 
@@ -662,54 +600,46 @@ Redo
 
 ```mermaid
 flowchart TD
-    S0[Start<br/>Text: ""<br/>Undo: []<br/>Redo: []]
-    S1[Type H<br/>Text: "H"<br/>Undo: [INSERT H]<br/>Redo: []]
-    S2[Type e<br/>Text: "He"<br/>Undo: [INSERT H, INSERT e]<br/>Redo: []]
-    S3[Type l<br/>Text: "Hel"<br/>Undo: [INSERT H, INSERT e, INSERT l]<br/>Redo: []]
-    S4[Undo<br/>Text: "He"<br/>Undo: [INSERT H, INSERT e]<br/>Redo: [INSERT l]]
-    S5[Undo<br/>Text: "H"<br/>Undo: [INSERT H]<br/>Redo: [INSERT l, INSERT e]]
-    S6[Redo<br/>Text: "He"<br/>Undo: [INSERT H, INSERT e]<br/>Redo: [INSERT l]]
+    S0["Start<br/>Nodes: ['']<br/>current → ''"]
+    S1["Type H<br/>Nodes: [''] ←→ ['H']<br/>current → 'H'"]
+    S2["Type e<br/>Nodes: [''] ←→ ['H'] ←→ ['He']<br/>current → 'He'"]
+    S3["Type l<br/>Nodes: [''] ←→ ['H'] ←→ ['He'] ←→ ['Hel']<br/>current → 'Hel'"]
+    S4["Undo<br/>Nodes: [''] ←→ ['H'] ←→ ['He'] ←→ ['Hel']<br/>current → 'He'"]
+    S5["Undo<br/>Nodes: [''] ←→ ['H'] ←→ ['He'] ←→ ['Hel']<br/>current → 'H'"]
+    S6["Redo<br/>Nodes: [''] ←→ ['H'] ←→ ['He'] ←→ ['Hel']<br/>current → 'He'"]
 
     S0 --> S1 --> S2 --> S3 --> S4 --> S5 --> S6
 ```
 
-Ghi chú: Trong diagram, phần tử bên phải của list có thể hiểu là top của stack.
+Ghi chú: Các node không bị xóa khi undo/redo — `current` chỉ di chuyển qua lại trong linked list. Node chỉ bị cắt khi có snapshot mới được ghi sau một undo.
 
 ---
 
-## 3.2 Flowchart — performAction(), undo(), redo()
+## 3.2 Flowchart — record(), undo(), redo()
 
 ```mermaid
 flowchart TD
     Start([Start]) --> Choice{Operation?}
 
-    Choice -->|performAction| PA1[Receive Action]
-    PA1 --> PA2[Apply action to text buffer]
-    PA2 --> PA3[Push action to undoStack]
-    PA3 --> PA4[Clear redoStack]
+    Choice -->|typeText / deleteText| PA1[Apply change to buffer]
+    PA1 --> PA2[snapshot = buffer.toString()]
+    PA2 --> PA3[history.record(snapshot)]
+    PA3 --> PA4["Create new ActionNode, attach to current.next<br/>Move current to new node"]
     PA4 --> End([End])
 
-    Choice -->|undo| U1{undoStack empty?}
-    U1 -->|Yes| U2[Print Nothing to undo]
+    Choice -->|undo| U1{canUndo? current.prev != null}
+    U1 -->|No| U2[Print Nothing to undo]
     U2 --> End
-    U1 -->|No| U3[Pop action from undoStack]
-    U3 --> U4{Action type?}
-    U4 -->|INSERT| U5[Delete inserted content]
-    U4 -->|DELETE| U6[Insert deleted content back]
-    U5 --> U7[Push action to redoStack]
-    U6 --> U7
-    U7 --> End
+    U1 -->|Yes| U3[current = current.prev]
+    U3 --> U4[buffer = current.snapshot]
+    U4 --> End
 
-    Choice -->|redo| R1{redoStack empty?}
-    R1 -->|Yes| R2[Print Nothing to redo]
+    Choice -->|redo| R1{canRedo? current.next != null}
+    R1 -->|No| R2[Print Nothing to redo]
     R2 --> End
-    R1 -->|No| R3[Pop action from redoStack]
-    R3 --> R4{Action type?}
-    R4 -->|INSERT| R5[Insert content again]
-    R4 -->|DELETE| R6[Delete content again]
-    R5 --> R7[Push action to undoStack]
-    R6 --> R7
-    R7 --> End
+    R1 -->|Yes| R3[current = current.next]
+    R3 --> R4[buffer = current.snapshot]
+    R4 --> End
 ```
 
 ---
@@ -718,51 +648,40 @@ flowchart TD
 
 ```mermaid
 classDiagram
+    class ActionNode {
+        -String snapshot
+        -ActionNode prev
+        -ActionNode next
+        +ActionNode(snapshot: String)
+        +getSnapshot() String
+        +getPrev() ActionNode
+        +getNext() ActionNode
+    }
+
+    class ActionHistory {
+        -ActionNode current
+        +ActionHistory(initialContent: String)
+        +record(snapshot: String) void
+        +undo() String
+        +redo() String
+        +canUndo() boolean
+        +canRedo() boolean
+        +getCurrent() String
+    }
+
     class TextEditor {
         -StringBuilder buffer
-        -UndoRedoEngine engine
-        +typeText(String text)
-        +deleteText(int position, int length)
-        +insertAt(int position, String content)
-        +deleteAt(int position, int length)
-        +undo()
-        +redo()
+        -ActionHistory history
+        +typeText(text: String) void
+        +deleteText(position: int, length: int) void
+        +undo() void
+        +redo() void
         +getText() String
-        +printState()
     }
 
-    class UndoRedoEngine {
-        -Deque~Action~ undoStack
-        -Deque~Action~ redoStack
-        -int maxHistory
-        +performAction(Action action)
-        +undo(TextEditor editor)
-        +redo(TextEditor editor)
-        +getUndoHistory() List~Action~
-        +getRedoHistory() List~Action~
-        +printStacks()
-    }
-
-    class Action {
-        -ActionType type
-        -String content
-        -int position
-        -LocalDateTime timestamp
-        +getType() ActionType
-        +getContent() String
-        +getPosition() int
-        +toString() String
-    }
-
-    class ActionType {
-        <<enumeration>>
-        INSERT
-        DELETE
-    }
-
-    TextEditor "1" --> "1" UndoRedoEngine : uses
-    UndoRedoEngine "1" --> "many" Action : stores
-    Action --> ActionType : has
+    ActionNode --> ActionNode : prev / next
+    ActionHistory --> ActionNode : manages current
+    TextEditor --> ActionHistory : uses
 ```
 
 ---
@@ -774,34 +693,33 @@ sequenceDiagram
     actor User
     participant UI as Console/UI Layer
     participant Editor as TextEditor
-    participant Engine as UndoRedoEngine
-    participant Undo as undoStack
-    participant Redo as redoStack
+    participant History as ActionHistory
+    participant Node as ActionNode
     participant Display as Display Output
 
     User->>UI: Type character "H"
     UI->>Editor: typeText("H")
     Editor->>Editor: Insert "H" into buffer
-    Editor->>Engine: performAction(Action INSERT H)
-    Engine->>Undo: push(Action INSERT H)
-    Engine->>Redo: clear()
-    Editor->>Display: Show current text and stack state
+    Editor->>History: record(snapshot="H")
+    History->>Node: new ActionNode("H")
+    History->>History: current = new node
+    Editor->>Display: Show current text
 
     User->>UI: Press Undo
     UI->>Editor: undo()
-    Editor->>Engine: undo(editor)
-    Engine->>Undo: pop latest action
-    Engine->>Editor: apply reverse operation
-    Engine->>Redo: push(undone action)
-    Editor->>Display: Show updated text and stack state
+    Editor->>History: undo()
+    History->>History: current = current.prev
+    History-->>Editor: return current.snapshot ("")
+    Editor->>Editor: buffer = ""
+    Editor->>Display: Show updated text
 
     User->>UI: Press Redo
     UI->>Editor: redo()
-    Editor->>Engine: redo(editor)
-    Engine->>Redo: pop latest action
-    Engine->>Editor: apply original operation
-    Engine->>Undo: push(redone action)
-    Editor->>Display: Show updated text and stack state
+    Editor->>History: redo()
+    History->>History: current = current.next
+    History-->>Editor: return current.snapshot ("H")
+    Editor->>Editor: buffer = "H"
+    Editor->>Display: Show updated text
 ```
 
 ---
@@ -823,17 +741,17 @@ Nhóm có 4 thành viên. Phân công nên cân bằng giữa code, report, diag
 
 ### Code files/modules owned
 
-- `UndoRedoEngine.java`
-- Integration logic giữa `TextEditor` và `UndoRedoEngine`
+- `ActionHistory.java`
+- Integration logic giữa `TextEditor` và `ActionHistory`
 - Final merge/check trước khi nộp
 
 ### Coding responsibilities
 
-- Implement `undoStack` và `redoStack`.
-- Implement `performAction(Action action)`.
-- Implement `undo(TextEditor editor)`.
-- Implement `redo(TextEditor editor)`.
-- Đảm bảo redoStack bị clear khi có action mới.
+- Implement `ActionHistory` (linked list core).
+- Implement `record(snapshot)`.
+- Implement `undo()` và `redo()` trong `ActionHistory`.
+- Implement `canUndo()` và `canRedo()`.
+- Đảm bảo nhánh redo cũ bị cắt đúng khi có snapshot mới.
 - Review code của các member khác để thống nhất style.
 
 ### Report sections owned
@@ -845,7 +763,7 @@ Nhóm có 4 thành viên. Phân công nên cân bằng giữa code, report, diag
 
 ### Diagrams responsible
 
-- Flowchart for `performAction()`, `undo()`, `redo()`.
+- Flowchart for `record()`, `undo()`, `redo()` trong `ActionHistory`.
 - Review toàn bộ Mermaid diagram trước khi nộp.
 
 ### Estimated effort
@@ -865,37 +783,37 @@ Nhóm có 4 thành viên. Phân công nên cân bằng giữa code, report, diag
 
 ### Code files/modules owned
 
-- `Action.java`
-- `ActionType.java`
-- Stack history formatting utilities if needed
+- `ActionNode.java`
+- `ActionHistory.java`
+- History traversal utilities if needed
 
 ### Coding responsibilities
 
-- Define `Action` object clearly.
-- Define enum `ActionType`.
-- Ensure action stores enough information for undo/redo.
-- Help design max history limit.
-- Write helper method `toString()` for readable stack output.
-- Verify Stack LIFO behavior with small tests.
+- Define `ActionNode` object (snapshot, prev, next).
+- Implement linked list traversal logic in `ActionHistory`.
+- Ensure snapshot stores enough text state for undo/redo.
+- Help design max history limit (trim HEAD node).
+- Write helper method to print the current linked list chain.
+- Verify doubly linked list prev/next pointer correctness.
 
 ### Report sections owned
 
 - Data Structure Design.
-- Stack justification.
+- Doubly Linked List justification.
 - Edge cases.
-- Explanation of push/pop behavior.
+- Explanation of `current` pointer navigation.
 
 ### Diagrams responsible
 
-- Stack State Diagram.
-- Two-stack model diagram.
+- Linked List State Diagram.
+- ActionNode chain diagram.
 
 ### Estimated effort
 
 | Task | Hours |
 |---|---:|
 | Design Action model | 2 |
-| Implement Action and ActionType | 2 |
+| Implement ActionNode and ActionHistory | 2 |
 | Stack behavior documentation | 2 |
 | Edge case analysis | 2 |
 | Diagram creation | 2 |
@@ -963,7 +881,7 @@ Nhóm có 4 thành viên. Phân công nên cân bằng giữa code, report, diag
 - Test redo on empty stack.
 - Test insert + undo + redo.
 - Test delete + undo + redo.
-- Test redoStack clear after new action.
+- Test that new snapshot cuts the redo chain.
 - Compare actual output with expected output.
 
 ### Report sections owned
@@ -1028,7 +946,7 @@ Giả sử nhóm có khoảng 3 tuần để hoàn thành project.
 |---|---|---|
 | Requirement analysis | All | Danh sách chức năng chính |
 | CT breakdown | Member 4 + Leader | Draft CT section |
-| Define Action model | Member 2 | `Action.java`, `ActionType.java` |
+| Define ActionNode model | Member 2 | `ActionNode.java`, `ActionHistory.java` |
 | Design stack behavior | Member 2 + Leader | Stack design notes |
 | Draw initial diagrams | Member 2, 3, 4 | Mermaid diagrams |
 | Create project skeleton | Member 1 + 3 | Java files compile được |
@@ -1039,7 +957,7 @@ Giả sử nhóm có khoảng 3 tuần để hoàn thành project.
 
 - Class diagram bản đầu.
 - Flowchart bản đầu.
-- `Action`, `ActionType`, `UndoRedoEngine`, `TextEditor`, `Main` skeleton.
+- `ActionNode`, `ActionHistory`, `TextEditor`, `Main` skeleton.
 - Report outline.
 - Demo sequence đã thống nhất.
 
@@ -1064,12 +982,12 @@ M1: Design approved + skeleton code compiles.
 
 | Task | Owner | Output |
 |---|---|---|
-| Implement `performAction()` | Member 1 | Action được push đúng |
-| Implement `undo()` | Member 1 | Undo INSERT/DELETE hoạt động |
-| Implement `redo()` | Member 1 | Redo INSERT/DELETE hoạt động |
+| Implement `record()` | Member 1 | ActionNode được tạo và gắn đúng |
+| Implement `undo()` | Member 1 | current.prev navigation hoạt động |
+| Implement `redo()` | Member 1 | current.next navigation hoạt động |
 | Implement `typeText()` | Member 3 | Gõ text cập nhật buffer |
 | Implement `deleteText()` | Member 3 | Xóa text cập nhật buffer |
-| Test Stack behavior | Member 2 | Stack output đúng LIFO |
+| Test linked list behavior | Member 2 | prev/next pointers đúng |
 | Prepare test cases | Member 4 | Test case table |
 | Integration testing | All | Demo chạy đúng |
 
@@ -1080,7 +998,7 @@ M1: Design approved + skeleton code compiles.
 - Chương trình chạy được demo chính.
 - Undo/Redo hoạt động đúng với insert.
 - Delete và undo delete hoạt động.
-- RedoStack clear đúng sau action mới.
+- Nhánh redo bị cắt đúng sau snapshot mới.
 - Bảng test cases có expected/actual.
 
 ### Milestone
@@ -1146,225 +1064,159 @@ Lý do chọn Java:
 
 ---
 
-## 6.1 `ActionType.java`
+## 6.1 `ActionNode.java`
 
 ```java
-public enum ActionType {
-    INSERT,
-    DELETE
-}
-```
+public class ActionNode {
+    private String snapshot;
+    private ActionNode prev;
+    private ActionNode next;
 
----
-
-## 6.2 `Action.java`
-
-```java
-import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
-
-public class Action {
-    private ActionType type;
-    private String content;
-    private int position;
-    private LocalDateTime timestamp;
-
-    public Action(ActionType type, String content, int position) {
-        this.type = type;
-        this.content = content;
-        this.position = position;
-        this.timestamp = LocalDateTime.now();
+    public ActionNode(String snapshot) {
+        this.snapshot = snapshot;
+        this.prev = null;
+        this.next = null;
     }
 
-    public ActionType getType() {
-        return type;
+    public String getSnapshot() {
+        return snapshot;
     }
 
-    public String getContent() {
-        return content;
+    public ActionNode getPrev() {
+        return prev;
     }
 
-    public int getPosition() {
-        return position;
+    public void setPrev(ActionNode prev) {
+        this.prev = prev;
     }
 
-    public LocalDateTime getTimestamp() {
-        return timestamp;
+    public ActionNode getNext() {
+        return next;
     }
 
-    @Override
-    public String toString() {
-        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("HH:mm:ss");
-        return type + "(\"" + content + "\", pos=" + position + ", time=" + timestamp.format(formatter) + ")";
+    public void setNext(ActionNode next) {
+        this.next = next;
     }
 }
 ```
 
 Giải thích ngắn:
 
-- `type` cho biết thao tác là insert hay delete.
-- `content` giúp undo/redo biết cần thêm hoặc xóa nội dung gì.
-- `position` giúp thao tác xảy ra đúng vị trí.
-- `timestamp` không bắt buộc cho thuật toán, nhưng hữu ích để hiển thị history trong report/demo.
+- `snapshot` lưu toàn bộ nội dung text tại thời điểm đó — đây là thứ sẽ được restore khi undo/redo.
+- `prev` và `next` tạo thành cấu trúc doubly linked list để `ActionHistory` duyệt qua lịch sử.
 
 ---
 
-## 6.3 `UndoRedoEngine.java`
+## 6.2 `ActionHistory.java`
 
 ```java
-import java.util.ArrayDeque;
-import java.util.ArrayList;
-import java.util.Deque;
-import java.util.List;
+public class ActionHistory {
+    private ActionNode current;
 
-public class UndoRedoEngine {
-    private Deque<Action> undoStack;
-    private Deque<Action> redoStack;
-    private int maxHistory;
-
-    public UndoRedoEngine(int maxHistory) {
-        this.undoStack = new ArrayDeque<>();
-        this.redoStack = new ArrayDeque<>();
-        this.maxHistory = maxHistory;
+    public ActionHistory(String initialContent) {
+        // Khởi tạo với snapshot ban đầu (thường là chuỗi rỗng)
+        this.current = new ActionNode(initialContent);
     }
 
-    public void performAction(Action action) {
-        // A new action creates a new editing path.
-        // Therefore, old redo history is no longer valid.
-        undoStack.push(action);
-        redoStack.clear();
-
-        // Keep memory usage controlled if maxHistory is enabled.
-        trimHistoryIfNeeded();
+    public void record(String snapshot) {
+        ActionNode newNode = new ActionNode(snapshot);
+        newNode.setPrev(current);
+        current.setNext(newNode); // ghi đè nhánh redo cũ
+        current = newNode;
     }
 
-    public void undo(TextEditor editor) {
-        if (undoStack.isEmpty()) {
+    public String undo() {
+        if (!canUndo()) {
             System.out.println("Nothing to undo.");
-            return;
+            return current.getSnapshot();
         }
-
-        Action action = undoStack.pop();
-
-        // Undo means applying the opposite of the original action.
-        if (action.getType() == ActionType.INSERT) {
-            editor.deleteAt(action.getPosition(), action.getContent().length(), false);
-        } else if (action.getType() == ActionType.DELETE) {
-            editor.insertAt(action.getPosition(), action.getContent(), false);
-        }
-
-        redoStack.push(action);
+        current = current.getPrev();
+        return current.getSnapshot();
     }
 
-    public void redo(TextEditor editor) {
-        if (redoStack.isEmpty()) {
+    public String redo() {
+        if (!canRedo()) {
             System.out.println("Nothing to redo.");
-            return;
+            return current.getSnapshot();
         }
-
-        Action action = redoStack.pop();
-
-        // Redo means applying the original action again.
-        if (action.getType() == ActionType.INSERT) {
-            editor.insertAt(action.getPosition(), action.getContent(), false);
-        } else if (action.getType() == ActionType.DELETE) {
-            editor.deleteAt(action.getPosition(), action.getContent().length(), false);
-        }
-
-        undoStack.push(action);
+        current = current.getNext();
+        return current.getSnapshot();
     }
 
-    private void trimHistoryIfNeeded() {
-        if (maxHistory <= 0) {
-            return;
+    public boolean canUndo() {
+        return current.getPrev() != null;
+    }
+
+    public boolean canRedo() {
+        return current.getNext() != null;
+    }
+
+    public String getCurrent() {
+        return current.getSnapshot();
+    }
+
+    public void printChain() {
+        // Traverse to HEAD first
+        ActionNode head = current;
+        while (head.getPrev() != null) {
+            head = head.getPrev();
         }
-
-        while (undoStack.size() > maxHistory) {
-            // ArrayDeque used as stack: push/pop operate at the front.
-            // removeLast removes the oldest action.
-            undoStack.removeLast();
+        // Print from HEAD to TAIL, marking current
+        StringBuilder sb = new StringBuilder();
+        ActionNode node = head;
+        while (node != null) {
+            String marker = (node == current) ? " ← current" : "";
+            sb.append("["").append(node.getSnapshot()).append(""]").append(marker);
+            if (node.getNext() != null) sb.append(" ←→ ");
+            node = node.getNext();
         }
-    }
-
-    public List<Action> getUndoHistory() {
-        return new ArrayList<>(undoStack);
-    }
-
-    public List<Action> getRedoHistory() {
-        return new ArrayList<>(redoStack);
-    }
-
-    public void printStacks() {
-        System.out.println("Undo Stack top -> " + undoStack);
-        System.out.println("Redo Stack top -> " + redoStack);
+        System.out.println("History: " + sb);
     }
 }
 ```
 
 Điểm quan trọng:
 
-- `performAction()` chỉ quản lý stack, còn việc sửa buffer do `TextEditor` làm trước đó.
-- `undo()` và `redo()` nhận `TextEditor` để có thể sửa text buffer.
-- Tham số `false` trong `insertAt/deleteAt` giúp tránh việc undo/redo tự tạo thêm action mới.
+- `record()` cắt đứt nhánh redo cũ bằng cách ghi đè `current.next` — không cần clear stack riêng.
+- `undo()` và `redo()` chỉ di chuyển con trỏ `current`, không xóa hay thêm node.
+- `getCurrent()` trả về snapshot để `TextEditor` restore buffer.
 
 ---
 
-## 6.4 `TextEditor.java`
+## 6.3 `TextEditor.java`
 
 ```java
 public class TextEditor {
     private StringBuilder buffer;
-    private UndoRedoEngine engine;
+    private ActionHistory history;
 
-    public TextEditor(int maxHistory) {
+    public TextEditor() {
         this.buffer = new StringBuilder();
-        this.engine = new UndoRedoEngine(maxHistory);
+        this.history = new ActionHistory("");
     }
 
     public void typeText(String text) {
-        int position = buffer.length();
-        insertAt(position, text, true);
-    }
-
-    public void insertAt(int position, String content, boolean recordAction) {
-        if (position < 0 || position > buffer.length()) {
-            System.out.println("Invalid insert position: " + position);
-            return;
-        }
-
-        buffer.insert(position, content);
-
-        if (recordAction) {
-            Action action = new Action(ActionType.INSERT, content, position);
-            engine.performAction(action);
-        }
+        buffer.append(text);
+        history.record(buffer.toString());
     }
 
     public void deleteText(int position, int length) {
-        deleteAt(position, length, true);
-    }
-
-    public void deleteAt(int position, int length, boolean recordAction) {
         if (position < 0 || length <= 0 || position + length > buffer.length()) {
             System.out.println("Invalid delete range: position=" + position + ", length=" + length);
             return;
         }
-
-        String deletedContent = buffer.substring(position, position + length);
         buffer.delete(position, position + length);
-
-        if (recordAction) {
-            Action action = new Action(ActionType.DELETE, deletedContent, position);
-            engine.performAction(action);
-        }
+        history.record(buffer.toString());
     }
 
     public void undo() {
-        engine.undo(this);
+        String snapshot = history.undo();
+        buffer = new StringBuilder(snapshot);
     }
 
     public void redo() {
-        engine.redo(this);
+        String snapshot = history.redo();
+        buffer = new StringBuilder(snapshot);
     }
 
     public String getText() {
@@ -1374,25 +1226,23 @@ public class TextEditor {
     public void printState(String label) {
         System.out.println("\n=== " + label + " ===");
         System.out.println("Current Text: \"" + getText() + "\"");
-        engine.printStacks();
+        history.printChain();
     }
 }
 ```
 
 Giải thích quan trọng:
 
-- `TextEditor` chịu trách nhiệm sửa text.
-- `UndoRedoEngine` chịu trách nhiệm quản lý history.
-- `recordAction = false` được dùng khi undo/redo để tránh bug phổ biến: undo lại bị ghi thành một action mới.
-
----
+- `TextEditor` sửa buffer rồi gọi `history.record()` — đơn giản hơn nhiều so với mô hình hai stack.
+- `undo()` và `redo()` chỉ cần lấy snapshot từ `ActionHistory` và gán lại `buffer`.
+- Không cần flag `recordAction` vì undo/redo không gọi lại `record()`.
 
 ## 6.5 `Main.java`
 
 ```java
 public class Main {
     public static void main(String[] args) {
-        TextEditor editor = new TextEditor(100);
+        TextEditor editor = new TextEditor();
 
         editor.printState("Initial State");
 
@@ -1440,43 +1290,36 @@ Output thực tế có timestamp nên sẽ hơi khác, nhưng logic nên giống
 ```text
 === Initial State ===
 Current Text: ""
-Undo Stack top -> []
-Redo Stack top -> []
+History: [""] ← current
 
 === After typing H ===
 Current Text: "H"
-Undo Stack top -> [INSERT("H", pos=0, time=10:30:01)]
-Redo Stack top -> []
+History: [""] ←→ ["H"] ← current
 
 === After typing e ===
 Current Text: "He"
-Undo Stack top -> [INSERT("e", pos=1, time=10:30:02), INSERT("H", pos=0, time=10:30:01)]
-Redo Stack top -> []
+History: [""] ←→ ["H"] ←→ ["He"] ← current
 
 === After typing o ===
 Current Text: "Hello"
-Undo Stack top -> [INSERT("o", pos=4, time=...), INSERT("l", pos=3, time=...), ...]
-Redo Stack top -> []
+History: [""] ←→ ["H"] ←→ ["He"] ←→ ["Hel"] ←→ ["Hell"] ←→ ["Hello"] ← current
 
 === After undo 1 ===
 Current Text: "Hell"
-Undo Stack top -> [INSERT("l", pos=3, time=...), ...]
-Redo Stack top -> [INSERT("o", pos=4, time=...)]
+History: [""] ←→ ["H"] ←→ ["He"] ←→ ["Hel"] ←→ ["Hell"] ← current ←→ ["Hello"]
 
 === After undo 2 ===
 Current Text: "Hel"
-Undo Stack top -> [INSERT("l", pos=2, time=...), ...]
-Redo Stack top -> [INSERT("l", pos=3, time=...), INSERT("o", pos=4, time=...)]
+History: [""] ←→ ["H"] ←→ ["He"] ←→ ["Hel"] ← current ←→ ["Hell"] ←→ ["Hello"]
 
 === After redo 1 ===
 Current Text: "Hell"
-Undo Stack top -> [INSERT("l", pos=3, time=...), INSERT("l", pos=2, time=...), ...]
-Redo Stack top -> [INSERT("o", pos=4, time=...)]
+History: [""] ←→ ["H"] ←→ ["He"] ←→ ["Hel"] ←→ ["Hell"] ← current ←→ ["Hello"]
 
 === After typing ! ===
 Current Text: "Hell!"
-Undo Stack top -> [INSERT("!", pos=4, time=...), INSERT("l", pos=3, time=...), ...]
-Redo Stack top -> []
+History: [""] ←→ ["H"] ←→ ["He"] ←→ ["Hel"] ←→ ["Hell"] ←→ ["Hell!"] ← current
+(nhánh ["Hello"] đã bị cắt)
 ```
 
 ---
@@ -1503,7 +1346,7 @@ Dưới đây là outline đầy đủ cho báo cáo. Nhóm có thể dùng gầ
 ### Gợi ý viết
 
 ```text
-The purpose of this project is to simulate the Undo/Redo mechanism commonly found in text editors. The project focuses on using two stacks to manage editing history: one stack for undo operations and another stack for redo operations.
+The purpose of this project is to simulate the Undo/Redo mechanism commonly found in text editors. The project uses a doubly linked list of ActionNodes managed by ActionHistory, with a current pointer that moves backward (undo) and forward (redo) through the history chain.
 ```
 
 ---
@@ -1517,29 +1360,24 @@ Chia thành 4 phần:
 Trình bày các module:
 
 - Text buffer.
-- Action object.
-- Undo stack.
-- Redo stack.
-- Undo/Redo engine.
+- ActionNode (snapshot + prev/next).
+- ActionHistory (current pointer management).
 - UI/demo layer.
 
 ### B. Pattern Recognition
 
 Nêu các pattern:
 
-- LIFO behavior.
+- Doubly linked list traversal (backward = undo, forward = redo).
 - Redo chỉ có sau Undo.
-- Action mới clear redoStack.
-- INSERT và DELETE có thao tác đảo ngược.
+- Snapshot mới cắt nhánh redo cũ.
+- Snapshot lưu toàn bộ state, không cần inverse operation.
 
 ### C. Abstraction
 
 Nêu dữ liệu cần lưu:
 
-- Type.
-- Content.
-- Position.
-- Timestamp.
+- snapshot (toàn bộ text buffer tại mỗi thời điểm).
 
 Nêu dữ liệu bỏ qua:
 
@@ -1565,20 +1403,19 @@ Có thể tham chiếu Flowchart ở phần diagram.
 
 ### Nội dung nên có
 
-- Vì sao chọn Stack?
-- Giải thích LIFO.
-- Mô hình hai stack.
-- Cấu trúc `Action`.
-- Push/pop behavior.
+- Vì sao chọn Doubly Linked List?
+- Giải thích cơ chế con trỏ `current`.
+- Cấu trúc `ActionNode` và `ActionHistory`.
+- Record / undo / redo navigation.
 - Edge cases.
 
 ### Stack choice justification
 
-Stack phù hợp vì thao tác mới nhất luôn là thao tác đầu tiên cần được undo. Đây chính là nguyên tắc LIFO.
+Doubly Linked List phù hợp vì lịch sử chỉnh sửa là một chuỗi tuyến tính — undo lùi về trước, redo tiến về sau. Con trỏ `current` phản ánh vị trí hiện tại trong chuỗi đó mà không cần xóa hay rebuild bất kỳ dữ liệu nào.
 
 ### Object model
 
-Trình bày `Action`, `UndoRedoEngine`, `TextEditor` và quan hệ giữa chúng.
+Trình bày `ActionNode`, `ActionHistory`, `TextEditor` và quan hệ giữa chúng.
 
 Tham chiếu:
 
@@ -1591,48 +1428,38 @@ Tham chiếu:
 
 ### Nên có pseudocode
 
-#### performAction
+#### record
 
 ```text
-function performAction(action):
-    push action into undoStack
-    clear redoStack
+function record(snapshot):
+    newNode = ActionNode(snapshot)
+    newNode.prev = current
+    current.next = newNode   // old redo chain is discarded
+    current = newNode
 ```
 
 #### undo
 
 ```text
 function undo():
-    if undoStack is empty:
+    if current.prev is null:
         print "Nothing to undo"
-        return
+        return current.snapshot
 
-    action = undoStack.pop()
-
-    if action.type is INSERT:
-        delete action.content at action.position
-    else if action.type is DELETE:
-        insert action.content at action.position
-
-    redoStack.push(action)
+    current = current.prev
+    return current.snapshot
 ```
 
 #### redo
 
 ```text
 function redo():
-    if redoStack is empty:
+    if current.next is null:
         print "Nothing to redo"
-        return
+        return current.snapshot
 
-    action = redoStack.pop()
-
-    if action.type is INSERT:
-        insert action.content at action.position
-    else if action.type is DELETE:
-        delete action.content at action.position
-
-    undoStack.push(action)
+    current = current.next
+    return current.snapshot
 ```
 
 ### Diagram references
@@ -1649,17 +1476,16 @@ function redo():
 
 - Ngôn ngữ sử dụng: Java.
 - Các class chính:
-  - `ActionType`
-  - `Action`
-  - `UndoRedoEngine`
+  - `ActionNode`
+  - `ActionHistory`
   - `TextEditor`
   - `Main`
 - Mô tả trách nhiệm từng class.
 - Key implementation decisions:
-  - Dùng `ArrayDeque` thay cho legacy `Stack`.
+  - Dùng doubly linked list thay cho hai stack riêng biệt.
   - Dùng `StringBuilder` cho text buffer.
-  - Dùng `recordAction` flag để tránh undo/redo bị ghi vào history như action mới.
-  - Clear redoStack khi có action mới.
+  - `record()` ghi đè `current.next` thay vì clear một stack riêng.
+  - Không cần `recordAction` flag vì undo/redo không gọi lại `record()`.
 
 ---
 
@@ -1670,11 +1496,11 @@ function redo():
 | Test ID | Input / Actions | Expected Result | Actual Result | Status |
 |---|---|---|---|---|
 | TC01 | Start program | Text empty, both stacks empty | Text empty, both stacks empty | Pass |
-| TC02 | Type `H`, `e`, `l`, `l`, `o` | Text = `Hello`, undoStack has 5 actions | Text = `Hello`, undoStack has 5 actions | Pass |
-| TC03 | Undo once after `Hello` | Text = `Hell`, redoStack has `INSERT o` | Text = `Hell`, redoStack has `INSERT o` | Pass |
-| TC04 | Undo twice after `Hello` | Text = `Hel`, redoStack has 2 actions | Text = `Hel`, redoStack has 2 actions | Pass |
-| TC05 | Redo once | Text = `Hell`, redoStack has 1 action | Text = `Hell`, redoStack has 1 action | Pass |
-| TC06 | Type `!` after undo/redo | Text = `Hell!`, redoStack cleared | Text = `Hell!`, redoStack cleared | Pass |
+| TC02 | Type `H`, `e`, `l`, `l`, `o` | Text = `Hello`, linked list has 6 nodes (incl. initial) | Text = `Hello`, 6 nodes | Pass |
+| TC03 | Undo once after `Hello` | Text = `Hell`, current moves to `"Hell"` node | Text = `Hell`, current = `"Hell"` node | Pass |
+| TC04 | Undo twice after `Hello` | Text = `Hel`, current moves to `"Hel"` node | Text = `Hel`, current = `"Hel"` node | Pass |
+| TC05 | Redo once | Text = `Hell`, current moves to `"Hell"` node | Text = `Hell`, current = `"Hell"` node | Pass |
+| TC06 | Type `!` after undo/redo | Text = `Hell!`, new node appended, redo chain cut | Text = `Hell!`, redo chain cut | Pass |
 | TC07 | Undo on empty stack | Print `Nothing to undo`, no crash | Print `Nothing to undo`, no crash | Pass |
 | TC08 | Redo on empty stack | Print `Nothing to redo`, no crash | Print `Nothing to redo`, no crash | Pass |
 | TC09 | Delete character then undo | Deleted char restored | Deleted char restored | Pass |
@@ -1691,17 +1517,17 @@ Nhóm nên chụp hoặc copy console output vào report để chứng minh chư
 ### Nội dung nên có
 
 - Tóm tắt project đã làm được gì.
-- Khẳng định Stack phù hợp với Undo/Redo vì LIFO.
+- Khẳng định Doubly Linked List phù hợp với Undo/Redo vì lịch sử là một chuỗi tuyến tính.
 - Nêu bài học:
-  - Tầm quan trọng của việc lưu đủ dữ liệu trong `Action`.
-  - Tầm quan trọng của edge cases.
-  - Vì sao redoStack phải clear khi action mới xảy ra.
-  - Cách chia module giúp code dễ hiểu hơn.
+  - Snapshot-based approach đơn giản hơn: không cần lưu type/content/position.
+  - Con trỏ `current` là chìa khóa của thiết kế.
+  - Redo tự nhiên qua `current.next` — không cần stack thứ hai.
+  - Cách chia module `ActionNode` / `ActionHistory` / `TextEditor` giúp code rõ ràng.
 
 ### Gợi ý viết
 
 ```text
-Through this project, our team learned how a simple data structure such as Stack can be used to implement a practical feature found in modern text editors. The two-stack model provides a clear and efficient way to manage undo and redo history.
+Through this project, our team learned how a doubly linked list can elegantly model the Undo/Redo mechanism found in modern text editors. Moving a current pointer backward and forward through a chain of snapshots is both intuitive and efficient.
 ```
 
 ---
@@ -1710,16 +1536,16 @@ Through this project, our team learned how a simple data structure such as Stack
 
 Nhóm có thể tham khảo:
 
-- Course slides for Stack data structure.
-- Java documentation for `Deque` and `ArrayDeque`.
+- Course slides for Linked List data structure.
+- Java documentation for object references and linked node patterns.
 - Basic editor Undo/Redo behavior from Microsoft Word or VS Code.
 - Mermaid documentation for diagrams.
 
 Ví dụ format:
 
 ```text
-[1] Oracle Java Documentation, ArrayDeque Class.
-[2] CSD201 Lecture Notes, Stack Data Structure.
+[1] Oracle Java Documentation, LinkedList and Node patterns in Java.
+[2] CSD201 Lecture Notes, Linked List Data Structure.
 [3] Mermaid.js Documentation, Flowchart and Class Diagram Syntax.
 ```
 
@@ -1731,106 +1557,103 @@ Dưới đây là những lỗi rất hay gặp khi sinh viên làm project Undo
 
 ---
 
-## 8.1 Lỗi 1: Chỉ lưu loại action, không lưu content và position
+## 8.1 Lỗi 1: Lưu snapshot không đầy đủ
 
-Một số bạn chỉ lưu:
+Một số bạn lưu snapshot chỉ là ký tự vừa gõ, không phải toàn bộ text buffer:
 
 ```text
-Action type = INSERT
+ActionNode(snapshot="H")   // chỉ ký tự vừa gõ — SAI
+ActionNode(snapshot="Hello") // toàn bộ buffer — ĐÚNG
 ```
 
-Nhưng khi undo, chương trình không biết phải xóa ký tự nào và ở đâu.
+Nếu snapshot không phải toàn bộ buffer, undo/redo sẽ không restore được text đúng.
 
 ### Cách tránh
 
-Luôn lưu đủ:
-
-```text
-type + content + position
-```
-
-Nếu thiếu một trong ba thông tin này, undo/redo sẽ rất dễ sai.
-
----
-
-## 8.2 Lỗi 2: Quên clear redoStack khi có action mới
-
-Đây là lỗi logic phổ biến nhất.
-
-Ví dụ:
-
-```text
-Type H
-Type e
-Undo
-Type a
-Redo
-```
-
-Nếu redoStack không bị clear, chương trình có thể redo lại `e` vào một lịch sử không còn đúng.
-
-### Cách tránh
-
-Trong `performAction()` luôn có:
+Luôn gọi `buffer.toString()` để lấy snapshot:
 
 ```java
-redoStack.clear();
+history.record(buffer.toString());
 ```
 
 ---
 
-## 8.3 Lỗi 3: Undo/Redo lại bị ghi thành action mới
+## 8.2 Lỗi 2: Không ghi đè current.next khi record()
 
-Nếu trong lúc undo, chương trình gọi hàm insert/delete bình thường và hàm đó lại push action vào undoStack, lịch sử sẽ bị sai.
+Nếu `record()` append node mới mà không cắt đứt `current.next`, chuỗi linked list sẽ bị phân nhánh không hợp lệ.
+
+Ví dụ lỗi:
+
+```java
+// SAI: không cắt nhánh cũ
+newNode.prev = current;
+current = newNode;
+// current.next của node cũ vẫn trỏ về nhánh redo cũ!
+```
 
 ### Cách tránh
 
-Dùng flag:
+Trong `record()` luôn ghi đè `current.next` trước:
 
 ```java
-insertAt(position, content, false);
-deleteAt(position, length, false);
+current.setNext(newNode); // ghi đè nhánh redo cũ
+current = newNode;
 ```
-
-Ý nghĩa: sửa buffer nhưng không record action mới.
 
 ---
 
-## 8.4 Lỗi 4: Không test stack rỗng
+## 8.3 Lỗi 3: Gọi record() khi undo/redo
 
-Nếu gọi `pop()` khi stack rỗng, chương trình có thể crash.
+Nếu trong lúc undo/redo, `TextEditor` lại gọi `history.record()`, một node mới sẽ được tạo và nhánh redo bị cắt — lịch sử hoàn toàn sai.
 
 ### Cách tránh
 
-Luôn kiểm tra trước:
+Trong `undo()` và `redo()` của `TextEditor`, chỉ gán lại buffer từ snapshot, **không** gọi `record()`:
 
 ```java
-if (undoStack.isEmpty()) {
-    System.out.println("Nothing to undo.");
-    return;
+public void undo() {
+    String snapshot = history.undo();
+    buffer = new StringBuilder(snapshot); // KHÔNG gọi history.record()
 }
 ```
 
-Tương tự cho redoStack.
+---
+
+## 8.4 Lỗi 4: Không kiểm tra null trước khi di chuyển current
+
+Nếu gọi `current = current.prev` khi `current.prev == null`, chương trình sẽ crash với NullPointerException.
+
+### Cách tránh
+
+Luôn dùng `canUndo()` / `canRedo()` trước:
+
+```java
+if (!canUndo()) {
+    System.out.println("Nothing to undo.");
+    return current.getSnapshot();
+}
+```
+
+Tương tự cho `canRedo()`.
 
 ---
 
-## 8.5 Lỗi 5: Nhầm top của stack khi in ra màn hình
+## 8.5 Lỗi 5: In linked list không đánh dấu current
 
-Khi dùng `ArrayDeque`, nếu dùng `push()`, phần tử mới nhất nằm ở đầu deque.
+Khi in ra chuỗi ActionNode để debug, nếu không đánh dấu node `current`, người đọc không biết trạng thái hiện tại ở đâu.
 
-Output có thể gây nhầm nếu không nói rõ:
+Output không rõ:
 
 ```text
-Undo Stack top -> [latest, previous, oldest]
+History: [""] ←→ ["H"] ←→ ["He"] ←→ ["Hel"]
 ```
 
 ### Cách tránh
 
-Trong demo/report, ghi rõ:
+Luôn đánh dấu `current` khi in:
 
 ```text
-The leftmost action is the top of the stack.
+History: [""] ←→ ["H"] ←→ ["He"] ← current  ←→ ["Hel"]
 ```
 
 ---
@@ -1875,14 +1698,14 @@ Report nên có đủ:
 
 # Final Advice from a Senior Mentor
 
-Project này không khó nếu nhóm giữ đúng trọng tâm: **Stack + Action history + clear algorithm**.
+Project này không khó nếu nhóm giữ đúng trọng tâm: **Doubly Linked List + snapshot history + current pointer**.
 
 Cách làm tốt nhất là:
 
-1. Đừng code ngay khi chưa thống nhất Action lưu gì.
-2. Vẽ stack state bằng tay trước.
-3. Implement insert trước, rồi undo insert.
-4. Sau đó mới thêm delete và undo delete.
+1. Đừng code ngay khi chưa thống nhất `ActionNode` lưu gì (snapshot = toàn bộ buffer).
+2. Vẽ linked list state bằng tay trước, đánh dấu current.
+3. Implement `record()` và `undo()` trước.
+4. Sau đó mới thêm `redo()` và `deleteText()`.
 5. Cuối cùng mới polish output và report.
 
 Nếu nhóm demo được sequence sau một cách rõ ràng, project đã rất ổn:
@@ -1905,10 +1728,10 @@ Kết quả mong muốn:
 Hello → Hell → Hel → Hell → Hell!
 ```
 
-Quan trọng hơn cả: khi thầy/cô hỏi “Tại sao dùng Stack?”, cả nhóm nên trả lời được ngay:
+Quan trọng hơn cả: khi thầy/cô hỏi “Tại sao dùng Doubly Linked List?”, cả nhóm nên trả lời được ngay:
 
 ```text
-Because Undo always reverses the most recent action first, which matches the Last In, First Out behavior of Stack. Redo also needs a separate stack to store undone actions in the correct order.
+Because editing history is a linear sequence. Undo moves the current pointer backward to the previous state, and Redo moves it forward. A doubly linked list naturally models this bidirectional navigation without needing two separate stacks.
 ```
 
 Chúc nhóm làm project thật chắc, dễ hiểu, và tự tin khi demo!
