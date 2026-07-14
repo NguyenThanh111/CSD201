@@ -10,6 +10,9 @@ public class TextEditor {
     }
 
     public void insert(int position, String text) {
+        if (text == null) {
+            throw new IllegalArgumentException("Text to insert cannot be null");
+        }
         if (position < 0 || position > content.length()) {
             throw new IllegalArgumentException("Position out of bounds");
         }
@@ -18,7 +21,7 @@ public class TextEditor {
     }
 
     public void delete(int position, int length) {
-        if (position < 0 || position >= content.length() || length < 0 || position + length > content.length()) {
+        if (position < 0 || position > content.length() || length < 0 || position + length > content.length()) {
             throw new IllegalArgumentException("Position or length out of bounds");
         }
         content.delete(position, position + length);
