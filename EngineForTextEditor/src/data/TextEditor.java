@@ -13,13 +13,19 @@ public class TextEditor {
         if (position < 0 || position > content.length()) {
             throw new IllegalArgumentException("Position out of bounds");
         }
+        if (text == null || text.length() == 0) {
+            return;
+        }
         content.insert(position, text);
         actionHistory.record(content.toString());
     }
 
     public void delete(int position, int length) {
-        if (position < 0 || position >= content.length() || length < 0 || position + length > content.length()) {
+        if (position < 0 || position > content.length() || length < 0 || position + length > content.length()) {
             throw new IllegalArgumentException("Position or length out of bounds");
+        }
+        if (length == 0) {
+            return;
         }
         content.delete(position, position + length);
         actionHistory.record(content.toString());

@@ -8,8 +8,12 @@ public class ActionHistory {
     }
 
     public void record(String snapshot) {
+        if (current.getSnapshot().equals(snapshot)) {
+            return;
+        }
         ActionNode newNode = new ActionNode(snapshot);
         newNode.prev = current;
+        current.next = null;
         current.next = newNode;
         current = newNode;
     }
