@@ -1,13 +1,13 @@
-
 package runtime;
 
 import data.TextEditor;
 import java.util.InputMismatchException;
 import java.util.Scanner;
+import java.util.InputMismatchException;
+import data.TextEditor;
 
 public class Program {
 
-    
     public static void main(String[] args) {
         //Menu
         System.out.println("=====Text Editor=====");
@@ -42,7 +42,7 @@ public class Program {
                         int deletePosition = scanner.nextInt();
                         System.out.print("Enter length to delete: ");
                         int deleteLength = scanner.nextInt();
-                        scanner.nextLine();
+                        scanner.nextLine(); // Consume newline
                         textEditor.delete(deletePosition, deleteLength);
                         System.out.println("Current Content: " + textEditor.getContent());
                         break;
@@ -62,10 +62,12 @@ public class Program {
                         System.out.println("Invalid option. Please try again.");
                 }
             } catch (InputMismatchException e) {
-                System.out.println("Invalid input. Please enter a number.");
-                scanner.nextLine();
+                System.out.println("Error: Please enter a valid integer.");
+                scanner.nextLine(); // Clear the invalid input from scanner buffer
             } catch (IllegalArgumentException e) {
-                System.out.println(e.getMessage());
+                System.out.println("Error: " + e.getMessage());
+            } catch (Exception e) {
+                System.out.println("An unexpected error occurred: " + e.getMessage());
             }
         }
     }
